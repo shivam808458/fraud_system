@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="main">
+    <h1>📊 Analytics Dashboard</h1>
+    <p style="text-align: center; color: var(--text-secondary); margin-bottom: 40px;">Visual representation of system security logs</p>
+
+    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 30px; max-width: 1000px; margin: 0 auto;">
+        
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="card" style="margin: 0; width: 100%; padding: 25px; border-left: 5px solid var(--danger);">
+                <h3 style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">TOTAL FRAUD</h3>
+                <h2 style="font-size: 2.5rem; margin: 10px 0;">{{fraud}}</h2>
+            </div>
+
+            <div class="card" style="margin: 0; width: 100%; padding: 25px; border-left: 5px solid var(--success);">
+                <h3 style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">NORMAL TRANSACTIONS</h3>
+                <h2 style="font-size: 2.5rem; margin: 10px 0;">{{normal}}</h2>
+            </div>
+        </div>
+
+        <div class="card" style="margin: 0; width: 100%; display: flex; align-items: center; justify-content: center; padding: 30px;">
+            <canvas id="fraudChart" style="max-width: 350px; max-height: 350px;"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('fraudChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Fraud', 'Normal'],
+            datasets: [{
+                data: [{{fraud}}, {{normal}}],
+                backgroundColor: ['#ef4444', '#10b981'],
+                borderColor: '#161e31',
+                borderWidth: 5,
+                hoverOffset: 15
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#94a3b8', padding: 20, font: { size: 14 } }
+                }
+            },
+            cutout: '70%'
+        }
+    });
+</script>
+
+{% endblock %}

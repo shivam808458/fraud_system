@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="main">
+    <h1>Security Analytics</h1>
+    <p class="subtitle">AI-powered engine for instant credit card fraud detection</p>
+
+    <div class="card">
+        <form id="fraudForm">
+            <div class="form-group">
+                <label>Transaction Amount</label>
+                <input type="number" step="any" id="amount" placeholder="0.00" required>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label>Feature V1</label>
+                    <input type="number" step="any" id="v1" placeholder="V1" required>
+                </div>
+                <div class="form-group">
+                    <label>Feature V2</label>
+                    <input type="number" step="any" id="v2" placeholder="V2" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Feature V3</label>
+                <input type="number" step="any" id="v3" placeholder="V3" required>
+            </div>
+
+            <button type="submit" id="predictBtn">Analyze Transaction</button>
+        </form>
+
+        <div id="resultContainer">
+            <h2 id="resultLabel" style="margin-top: 0;"></h2>
+            <div id="probLabel" style="font-weight: 500; opacity: 0.9;"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Direct Script for Button functionality
+    document.getElementById("fraudForm").addEventListener("submit", async function(e) {
+        e.preventDefault();
+        
+        const btn = document.getElementById("predictBtn");
+        const container = document.getElementById("resultContainer");
+        const resLabel = document.getElementById("resultLabel");
+        const probLabel = document.getElementById("probLabel");
+
+        // UI Loading state
+        btn.disabled = true;
+        btn.innerText = "Scanning Database...";
+        container.style.display = "none";
+
+        // Collect inputs
+        const features = [
+            parseFloat(document.getElementById("amount").value),
+            parseFloat(document.getElementById("v1").value),
+            parseFloat(document.getElementById("v2").value),
+            parseFloat(document.getElementById("v3").value)
+        ];
+
+        try {
+            const response = await fetch("/predict", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ features: features })
+            });
+
+            const data = await response.json();
+
+            // Handle Error or Result
+            if (data.error) {
+                alert("Error: " + data.error);
+            } else {
+                container.style.display = "block";
+                if (data.result === "Fraud") {
+                    container.className = "fraud-alert";
+                    resLabel.innerHTML = "🔴 High Risk Detected";
+                } else {
+                    container.className = "normal-alert";
+                    resLabel.innerHTML = "🟢 Transaction Verified";
+                }
+                probLabel.innerText = "Fraud Confidence: " + data.probability + "%";
+            }
+        } catch (error) {
+            console.error("Fetch Error:", error);
+            alert("Could not connect to the server.");
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Analyze Transaction";
+        }
+    });
+</script>
+
+{% endblock %}

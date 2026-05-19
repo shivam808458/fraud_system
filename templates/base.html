@@ -1,27 +1,29 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Fraud Detection System</title>
-<link rel="stylesheet" href="/static/style.css">
+<title>Fraud Guard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css', v=5) }}">
 </head>
 
 <body>
 
 <nav class="navbar">
-<h2>💳 Fraud Detection</h2>
+<h2>Fraud Guard</h2>
 
 <div>
-<a href="/">Transaction</a>
+<a href="/">Predict</a>
+
+{% if session.get('logged_in') %}
 <a href="/dashboard">Dashboard</a>
-<a href="/admin">Admin</a>
+<a href="/admin">Admin Logs</a>
+<a href="/logout" style="color:red;">Logout</a>
+{% else %}
+<a href="/login">Admin Login</a>
+{% endif %}
 </div>
 </nav>
 
-<div class="main">
 {% block content %}{% endblock %}
-</div>
-
-<script src="/static/script.js"></script>
 
 </body>
 </html>

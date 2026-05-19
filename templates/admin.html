@@ -2,43 +2,50 @@
 {% block content %}
 
 <div class="main">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
-        <h1 style="margin: 0;">🛡️ Transaction Monitoring</h1>
-        <span style="background: var(--accent); padding: 5px 15px; border-radius: 20px; font-size: 0.8rem; font-weight: bold;">LIVE LOGS</span>
-    </div>
 
-    <div class="table-container" style="background: var(--card-bg); border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
-        <table style="width: 100%; border-collapse: collapse; text-align: left;">
-            <thead>
-                <tr style="background: rgba(99, 102, 241, 0.1); color: var(--accent);">
-                    <th style="padding: 15px;">ID</th>
-                    <th style="padding: 15px;">Amount</th>
-                    <th style="padding: 15px;">V1 - V3 Features</th>
-                    <th style="padding: 15px;">Status</th>
-                    <th style="padding: 15px;">Timestamp</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in data %}
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); transition: 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
-                    <td style="padding: 15px; color: var(--text-secondary);">#{{row[0]}}</td>
-                    <td style="padding: 15px; font-weight: bold;">${{row[1]}}</td>
-                    <td style="padding: 15px; font-size: 0.85rem; color: var(--text-secondary);">
-                        {{row[2]|round(2)}}, {{row[3]|round(2)}}, {{row[4]|round(2)}}
-                    </td>
-                    <td style="padding: 15px;">
-                        {% if row[5] == 'Fraud' %}
-                        <span style="background: rgba(239, 68, 68, 0.2); color: #fca5a5; padding: 4px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; border: 1px solid var(--danger);">FRAUD</span>
-                        {% else %}
-                        <span style="background: rgba(16, 185, 129, 0.2); color: #86efac; padding: 4px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: bold; border: 1px solid var(--success);">NORMAL</span>
-                        {% endif %}
-                    </td>
-                    <td style="padding: 15px; font-size: 0.85rem; color: var(--text-secondary);">{{row[6]}}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+<h1>Transaction Logs</h1>
+
+<form action="{{ url_for('delete_all') }}" method="POST">
+<button type="submit" onclick="return confirm('Delete all logs?')">
+Delete All Logs
+</button>
+</form>
+
+<div class="card">
+
+<table>
+<tr>
+<th>ID</th>
+<th>Amount</th>
+<th>Status</th>
+<th>Time</th>
+<th>Action</th>
+</tr>
+
+{% for row in data %}
+<tr>
+<td>{{row['id']}}</td>
+<td>{{row['amount']}}</td>
+
+<td class="{{ 'status-fraud' if row['result']=='Fraud' else 'status-normal' }}">
+{{row['result']}}
+</td>
+
+<td>{{row['time']}}</td>
+
+<td>
+<form action="{{ url_for('delete_log', id=row['id']) }}" method="POST">
+<button type="submit" onclick="return confirm('Delete record?')">
+Delete
+</button>
+</form>
+</td>
+
+</tr>
+{% endfor %}
+</table>
+
+</div>
 </div>
 
 {% endblock %}

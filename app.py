@@ -1,6 +1,7 @@
 import os
 import pickle
 import sqlite3
+import shutil
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 import pandas as pd
@@ -14,11 +15,22 @@ ADMIN_PASS = "password123"
 
 # Serverless absolute paths configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "database.db")
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
 
-# Safely load model and scaler without crashing the function container
+# Serverless Writeable Path Fix for SQLite
+# Vercel updates root as read-only, so copy production DB to writeable /tmp folder
+ORIGINAL_DB_PATH = os.path.join(BASE_DIR, "database.db")
+DB_PATH = "/tmp/database.db"
+
+if not os.path.exists(DB_PATH):
+    if os.path.exists(ORIGINAL_DB_PATH):
+        shutil.copy1(ORIGINAL_DB_PATH, DB_PATH)
+    else:
+        # Create empty file if no db exists yet
+        open(DB_PATH, "a").close()
+
+# Safely load model and scaler without crashing the container execution
 model = None
 scaler = None
 
@@ -29,16 +41,16 @@ try:
     if os.path.exists(SCALER_PATH):
         with open(SCALER_PATH, "rb") as f:
             scaler = pickle.load(f)
-except Exception as e:
-    print(f"Pickle load error: {e}")
+except Exception:
+    pass
 
-# database connection using absolute path
+# database connection using writeable serverless temp path
 def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-# Database table configuration control for fresh deployment
+# Database table configuration control for fresh deployment containers
 def init_db():
     conn = get_db_connection()
     conn.execute("""

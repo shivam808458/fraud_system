@@ -18,15 +18,19 @@ DB_PATH = os.path.join(BASE_DIR, "database.db")
 MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
 
-# Safely load model and scaler
+# Safely load model and scaler without crashing the function container
 model = None
 scaler = None
 
-if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
-    with open(MODEL_PATH, "rb") as f:
-        model = pickle.load(f)
-    with open(SCALER_PATH, "rb") as f:
-        scaler = pickle.load(f)
+try:
+    if os.path.exists(MODEL_PATH):
+        with open(MODEL_PATH, "rb") as f:
+            model = pickle.load(f)
+    if os.path.exists(SCALER_PATH):
+        with open(SCALER_PATH, "rb") as f:
+            scaler = pickle.load(f)
+except Exception as e:
+    print(f"Pickle load error: {e}")
 
 # database connection using absolute path
 def get_db_connection():
@@ -92,31 +96,34 @@ def predict():
     if len(data) < 4:
         return jsonify({"error": "Insufficient features provided"}), 400
 
-    feature_names = ["Amount", "V1", "V2", "V3"]
-    raw = pd.DataFrame([[float(x) for x in data[:4]]], columns=feature_names)
-    scaled = scaler.transform(raw)
+    try:
+        feature_names = ["Amount", "V1", "V2", "V3"]
+        raw = pd.DataFrame([[float(x) for x in data[:4]]], columns=feature_names)
+        scaled = scaler.transform(raw)
 
-    # prediction
-    prediction = model.predict(scaled)[0]
+        # prediction
+        prediction = model.predict(scaled)[0]
 
-    # REAL probability
-    prob = model.predict_proba(scaled)[0][1] * 100
-    result = "Fraud" if prediction == 1 else "Normal"
+        # REAL probability
+        prob = model.predict_proba(scaled)[0][1] * 100
+        result = "Fraud" if prediction == 1 else "Normal"
 
-    # save to database
-    conn = get_db_connection()
-    conn.execute("""
-    INSERT INTO transactions(amount,v1,v2,v3,result,time)
-    VALUES(?,?,?,?,?,?)
-    """, (data[0], data[1], data[2], data[3], result,
-          datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()
-    conn.close()
+        # save to database
+        conn = get_db_connection()
+        conn.execute("""
+        INSERT INTO transactions(amount,v1,v2,v3,result,time)
+        VALUES(?,?,?,?,?,?)
+        """, (data[0], data[1], data[2], data[3], result,
+              datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        conn.close()
 
-    return jsonify({
-        "result": result,
-        "probability": round(prob, 2)
-    })
+        return jsonify({
+            "result": result,
+            "probability": round(prob, 2)
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ================= DASHBOARD =================
 @app.route("/dashboard")
@@ -124,35 +131,39 @@ def dashboard():
     if not session.get("logged_in"):
         return redirect(url_for("login"))
 
-    if not model:
-        return "Model not initialized structure error."
+    try:
+        conn = get_db_connection()
+        fraud = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE result='Fraud'"
+        ).fetchone()[0]
 
-    conn = get_db_connection()
-    fraud = conn.execute(
-        "SELECT COUNT(*) FROM transactions WHERE result='Fraud'"
-    ).fetchone()[0]
+        normal = conn.execute(
+            "SELECT COUNT(*) FROM transactions WHERE result='Normal'"
+        ).fetchone()[0]
 
-    normal = conn.execute(
-        "SELECT COUNT(*) FROM transactions WHERE result='Normal'"
-    ).fetchone()[0]
+        total = fraud + normal
+        conn.close()
 
-    total = fraud + normal
-    conn.close()
+        # Real fraud percentage
+        fraud_percent = round((fraud / total) * 100, 2) if total > 0 else 0
 
-    # Real fraud percentage
-    fraud_percent = round((fraud / total) * 100, 2) if total > 0 else 0
+        # Real feature importance from trained model
+        importance = []
+        if model and hasattr(model, 'coef_'):
+            importance = [abs(i) for i in model.coef_[0].tolist()]
+        else:
+            importance = [0, 0, 0, 0]
 
-    # Real feature importance from trained model
-    importance = [abs(i) for i in model.coef_[0].tolist()]
-
-    return render_template(
-        "dashboard.html",
-        fraud=fraud,
-        normal=normal,
-        total=total,
-        fraud_percent=fraud_percent,
-        importance=importance
-    )
+        return render_template(
+            "dashboard.html",
+            fraud=fraud,
+            normal=normal,
+            total=total,
+            fraud_percent=fraud_percent,
+            importance=importance
+        )
+    except Exception as e:
+        return f"Dashboard Error: {str(e)}"
 
 # ================= ADMIN PAGE =================
 @app.route("/admin")
@@ -160,11 +171,13 @@ def admin():
     if not session.get("logged_in"):
         return redirect(url_for("login"))
 
-    conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM transactions ORDER BY id DESC").fetchall()
-    conn.close()
-
-    return render_template("admin.html", data=rows)
+    try:
+        conn = get_db_connection()
+        rows = conn.execute("SELECT * FROM transactions ORDER BY id DESC").fetchall()
+        conn.close()
+        return render_template("admin.html", data=rows)
+    except Exception as e:
+        return f"Admin Page Error: {str(e)}"
 
 # ================= DELETE SINGLE =================
 @app.route("/delete/<int:id>", methods=["POST"])

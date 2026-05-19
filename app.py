@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
-import pandas as pd
+import os
 import pickle
 import sqlite3
 from datetime import datetime
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+import pandas as pd
 
 app = Flask(__name__)
 app.secret_key = "secret123"
@@ -11,25 +12,57 @@ app.secret_key = "secret123"
 ADMIN_USER = "admin"
 ADMIN_PASS = "password123"
 
-# load model
-model = pickle.load(open("model.pkl", "rb"))
-scaler = pickle.load(open("scaler.pkl", "rb"))
+# Serverless absolute paths configuration
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "database.db")
+MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
 
-# database connection
+# Safely load model and scaler
+model = None
+scaler = None
+
+if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
+    with open(MODEL_PATH, "rb") as f:
+        model = pickle.load(f)
+    with open(SCALER_PATH, "rb") as f:
+        scaler = pickle.load(f)
+
+# database connection using absolute path
 def get_db_connection():
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+# Database table configuration control for fresh deployment
+def init_db():
+    conn = get_db_connection()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            amount REAL,
+            v1 REAL,
+            v2 REAL,
+            v3 REAL,
+            result TEXT,
+            time TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+try:
+    init_db()
+except Exception:
+    pass
 
 # ================= HOME =================
 @app.route("/")
 def home():
     return render_template("index.html")
 
-
 # ================= LOGIN =================
-@app.route("/login", methods=["GET","POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         username = request.form.get("username")
@@ -43,7 +76,6 @@ def login():
 
     return render_template("login.html")
 
-
 @app.route("/logout")
 def logout():
     session.clear()
@@ -51,12 +83,17 @@ def logout():
 
 @app.route("/predict", methods=["POST"])
 def predict():
+    if not model or not scaler:
+        return jsonify({"error": "Model files are not initialized properly on server."}), 500
 
-    data = request.json.get("features")
+    json_data = request.get_json() or {}
+    data = json_data.get("features", [])
 
-    feature_names = ["Amount","V1","V2","V3"]
-    raw = pd.DataFrame([[float(x) for x in data]], columns=feature_names)
+    if len(data) < 4:
+        return jsonify({"error": "Insufficient features provided"}), 400
 
+    feature_names = ["Amount", "V1", "V2", "V3"]
+    raw = pd.DataFrame([[float(x) for x in data[:4]]], columns=feature_names)
     scaled = scaler.transform(raw)
 
     # prediction
@@ -64,7 +101,6 @@ def predict():
 
     # REAL probability
     prob = model.predict_proba(scaled)[0][1] * 100
-
     result = "Fraud" if prediction == 1 else "Normal"
 
     # save to database
@@ -72,14 +108,14 @@ def predict():
     conn.execute("""
     INSERT INTO transactions(amount,v1,v2,v3,result,time)
     VALUES(?,?,?,?,?,?)
-    """,(data[0],data[1],data[2],data[3],result,
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    """, (data[0], data[1], data[2], data[3], result,
+          datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     conn.commit()
     conn.close()
 
     return jsonify({
         "result": result,
-        "probability": round(prob,2)
+        "probability": round(prob, 2)
     })
 
 # ================= DASHBOARD =================
@@ -88,8 +124,10 @@ def dashboard():
     if not session.get("logged_in"):
         return redirect(url_for("login"))
 
-    conn = get_db_connection()
+    if not model:
+        return "Model not initialized structure error."
 
+    conn = get_db_connection()
     fraud = conn.execute(
         "SELECT COUNT(*) FROM transactions WHERE result='Fraud'"
     ).fetchone()[0]
@@ -99,7 +137,6 @@ def dashboard():
     ).fetchone()[0]
 
     total = fraud + normal
-
     conn.close()
 
     # Real fraud percentage
@@ -117,7 +154,6 @@ def dashboard():
         importance=importance
     )
 
-
 # ================= ADMIN PAGE =================
 @app.route("/admin")
 def admin():
@@ -128,8 +164,7 @@ def admin():
     rows = conn.execute("SELECT * FROM transactions ORDER BY id DESC").fetchall()
     conn.close()
 
-    return render_template("admin.html",data=rows)
-
+    return render_template("admin.html", data=rows)
 
 # ================= DELETE SINGLE =================
 @app.route("/delete/<int:id>", methods=["POST"])
@@ -143,7 +178,6 @@ def delete_log(id):
     conn.close()
 
     return redirect(url_for("admin"))
-
 
 # ================= DELETE ALL =================
 @app.route("/delete_all", methods=["POST"])
@@ -160,6 +194,5 @@ def delete_all():
     return redirect(url_for("admin"))
 
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
